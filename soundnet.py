@@ -49,6 +49,8 @@ class SoundNet(nn.Module):
                                     stride=(2, 1))
 
     def forward(self, waveform):
+        if len(waveform.shape) == 3:
+            waveform = waveform.unsqueeze(3)
         x = self.conv1(waveform)
         x = self.batchnorm1(x)
         x = self.relu1(x)
