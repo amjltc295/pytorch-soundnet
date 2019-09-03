@@ -1,3 +1,6 @@
+import math
+
+import torch
 from torch import nn
 
 
@@ -48,10 +51,15 @@ class SoundNet(nn.Module):
         self.conv8_scns = nn.Conv2d(1024, 401, kernel_size=(8, 1),
                                     stride=(2, 1))
 
-    def forward(self, waveform):
+    def forward(self, waveform, sr=22050):
+        waveform = waveform * 256
         if len(waveform.shape) == 3:
             waveform = waveform.unsqueeze(3)
         B, _, L, _ = waveform.shape
+        # Repeat to 10 second
+        if L < sr * 10:
+            waveform = waveform.repeat((1, 1, math.ceil(10 / (L / sr)), 1))
+        waveform = waveform[:, :, :10 * sr, :]
 
         x = self.conv1(waveform)
         x = self.batchnorm1(x)
@@ -83,5 +91,9 @@ class SoundNet(nn.Module):
         x = self.conv7(x)
         x = self.batchnorm7(x)
         x = self.relu7(x)
+        return x
 
-        return x.reshape(B, -1)
+        objs = self.conv8_objs(x)
+        scns = self.conv8_scns(x)
+        out = torch.cat([objs, scns], dim=1)
+        return out.reshape(B, -1)
