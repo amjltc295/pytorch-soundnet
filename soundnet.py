@@ -5,8 +5,12 @@ from torch import nn
 
 
 class SoundNet(nn.Module):
-    def __init__(self):
+    def __init__(self, sample_rate=22050, input_second=10, scale_factor=256, feature_layer='relu7'):
         super(SoundNet, self).__init__()
+        self.sample_rate = sample_rate
+        self.input_second = input_second
+        self.scale_factor = scale_factor
+        self.feature_layer = feature_layer
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=(64, 1), stride=(2, 1),
                                padding=(32, 0))
@@ -51,15 +55,15 @@ class SoundNet(nn.Module):
         self.conv8_scns = nn.Conv2d(1024, 401, kernel_size=(8, 1),
                                     stride=(2, 1))
 
-    def forward(self, waveform, sr=22050):
-        waveform = waveform * 256
+    def forward(self, waveform):
+        waveform = waveform * self.scale_factor
         if len(waveform.shape) == 3:
             waveform = waveform.unsqueeze(3)
         B, _, L, _ = waveform.shape
-        # Repeat to 10 second
-        if L < sr * 10:
-            waveform = waveform.repeat((1, 1, math.ceil(10 / (L / sr)), 1))
-        waveform = waveform[:, :, :10 * sr, :]
+        # Repeat to input_second
+        if L < self.sample_rate * self.input_second:
+            waveform = waveform.repeat((1, 1, math.ceil(10 / (L / self.sample_rate)), 1))
+        waveform = waveform[:, :, :self.sample_rate * self.input_second, :]
 
         x = self.conv1(waveform)
         x = self.batchnorm1(x)
@@ -91,9 +95,15 @@ class SoundNet(nn.Module):
         x = self.conv7(x)
         x = self.batchnorm7(x)
         x = self.relu7(x)
-        return x
 
-        objs = self.conv8_objs(x)
-        scns = self.conv8_scns(x)
-        out = torch.cat([objs, scns], dim=1)
-        return out.reshape(B, -1)
+        if self.feature_layer == 'relu7':
+            return x.reshape(B, -1)
+
+        elif self.feature_layer == 'last':
+            objs = self.conv8_objs(x)
+            scns = self.conv8_scns(x)
+            out = torch.cat([objs, scns], dim=1)
+            return out.reshape(B, -1)
+
+        else:
+            raise NotImplementedError(f"Wrong feature layer: {self.feature_layer}")
